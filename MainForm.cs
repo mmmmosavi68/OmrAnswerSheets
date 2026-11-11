@@ -119,6 +119,19 @@ public partial class MainForm : Form
     }
     private void RegisterEvents()
     {
+        _controller.TimingMarksDetected += result =>
+        {
+            MessageBox.Show(
+                result.Message,
+                result.IsSuccess
+                    ? "نتیجه تشخیص تایم‌مارک‌ها"
+                    : "خطا در تشخیص تایم‌مارک‌ها",
+                MessageBoxButtons.OK,
+                result.IsSuccess
+                    ? MessageBoxIcon.Information
+                    : MessageBoxIcon.Warning);
+        };
+
         btnSelectFile.Click += (_, _) =>
         {
             using var dialog = new OpenFileDialog

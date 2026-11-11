@@ -11,7 +11,8 @@ public sealed class MainFormController
 {
     private readonly AlignmentService _alignmentService;
     private readonly AlignmentSettings _settings;
-
+    // سرویس تشخیص تایم‌مارک
+    private readonly TimingMarkDetectionService _timingMarkService = new();
     public AlignmentProfile Profile { get; private set; }
 
     public event Action<Bitmap>? SourceImageReady;
@@ -21,7 +22,7 @@ public sealed class MainFormController
     public event Action<string>? StatusChanged;
 
     public event Action<IReadOnlyList<ImageFileItem>>? FilesLoaded;
-
+    public event Action<TimingMarkDetectionResult>? TimingMarksDetected;
     public MainFormController(
         AlignmentSettings settings)
     {
@@ -74,12 +75,12 @@ public sealed class MainFormController
             $"تعداد {files.Count} تصویر پیدا شد.");
     }
 
+
     public void LoadImage(string imagePath)
     {
         if (!File.Exists(imagePath))
         {
-            StatusChanged?.Invoke(
-                "فایل تصویر پیدا نشد.");
+            StatusChanged?.Invoke("فایل تصویر پیدا نشد.");
             return;
         }
 
@@ -87,8 +88,7 @@ public sealed class MainFormController
         {
             using (var loaded = new Bitmap(imagePath))
             {
-                SourceImageReady?.Invoke(
-                    new Bitmap(loaded));
+                SourceImageReady?.Invoke(new Bitmap(loaded));
             }
 
             using var result = _alignmentService.Align(
@@ -97,8 +97,7 @@ public sealed class MainFormController
                 _settings);
 
             var alignedBitmap =
-                BitmapConverter.ToBitmap(
-                    result.AlignedImage);
+                BitmapConverter.ToBitmap(result.AlignedImage);
 
             var info =
                 $"فایل: {Path.GetFileName(imagePath)}\n" +
@@ -109,19 +108,45 @@ public sealed class MainFormController
                 $"اصلاح جهت 180 درجه: " +
                 (result.WasRotated180 ? "بله" : "خیر");
 
-            ImagesReady?.Invoke(
-                alignedBitmap,
-                info);
+            ImagesReady?.Invoke(alignedBitmap, info);
 
-            StatusChanged?.Invoke(
-                "تصویر با موفقیت تراز شد.");
+            // اگر تنظیمات OMR فعال نباشد، فقط تراز تصویر انجام می‌شود.
+            if (!Profile.OmrLayout.Enabled)
+            {
+                StatusChanged?.Invoke(
+                    "تصویر با موفقیت تراز شد؛ تنظیمات OMR فعال نیست.");
+
+                return;
+            }
+
+            // تشخیص تایم‌مارک‌ها روی تصویر تراز‌شده
+            try
+            {
+                var timingResult = _timingMarkService.Detect(
+                    result.AlignedImage,
+                    Profile.OmrLayout);
+
+                TimingMarksDetected?.Invoke(timingResult);
+
+                StatusChanged?.Invoke(
+                    timingResult.IsSuccess
+                        ? "تراز تصویر و تشخیص تایم‌مارک‌ها موفق بود."
+                        : "تصویر تراز شد، اما تشخیص تایم‌مارک‌ها ناموفق بود.");
+            }
+            catch (Exception ex)
+            {
+                StatusChanged?.Invoke(
+                    "تصویر تراز شد؛ خطا در تشخیص تایم‌مارک‌ها: " +
+                    ex.Message);
+            }
         }
         catch (Exception ex)
         {
             StatusChanged?.Invoke(
-                "خطا در تراز تصویر: " + ex.Message);
+                "خطا در پردازش تصویر: " + ex.Message);
         }
     }
+
 }
 
 public sealed class ImageFileItem
