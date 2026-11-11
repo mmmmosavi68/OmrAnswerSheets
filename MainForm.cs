@@ -119,6 +119,78 @@ public partial class MainForm : Form
     }
     private void RegisterEvents()
     {
+
+        _controller.OmrDebugImageReady += bitmap =>
+        {
+            _alignedView.SetImage(bitmap);
+        };
+        _controller.BubblesDetected += result =>
+        {
+            var message = new System.Text.StringBuilder();
+
+            message.AppendLine(result.Message);
+            message.AppendLine();
+
+            foreach (var row in result.Rows)
+            {
+                message.AppendLine($"ردیف: {row.RowName}");
+                message.AppendLine($"مقدار عددی ردیف: {row.Value}");
+                message.AppendLine();
+
+                foreach (var bubble in row.Bubbles)
+                {
+                    message.AppendLine(
+                        $"حباب {bubble.Index}: " +
+                        $"{bubble.Message} - " +
+                        $"درصد سیاهی: {bubble.BlackRatio:P1}");
+                }
+
+                message.AppendLine();
+                message.AppendLine("--------------------------------");
+                message.AppendLine();
+            }
+
+            var resultForm = new Form
+            {
+                Text = "نتیجه خواندن حباب‌ها",
+                StartPosition = FormStartPosition.CenterParent,
+                Size = new Size(650, 650),
+                MinimumSize = new Size(450, 350),
+                MaximizeBox = true,
+                MinimizeBox = false,
+                ShowInTaskbar = false,
+                RightToLeft = RightToLeft.Yes,
+                RightToLeftLayout = true
+            };
+
+            var txtResult = new TextBox
+            {
+                Multiline = true,
+                ReadOnly = true,
+                ScrollBars = ScrollBars.Vertical,
+                WordWrap = true,
+                Dock = DockStyle.Fill,
+                Font = new Font("Tahoma", 10),
+                Text = message.ToString(),
+                BackColor = SystemColors.Window
+            };
+
+            var btnClose = new Button
+            {
+                Text = "بستن",
+                Dock = DockStyle.Bottom,
+                Height = 40,
+                DialogResult = DialogResult.OK
+            };
+
+            resultForm.Controls.Add(txtResult);
+            resultForm.Controls.Add(btnClose);
+            resultForm.AcceptButton = btnClose;
+
+            resultForm.ShowDialog(this);
+        };
+
+
         _controller.TimingMarksDetected += result =>
         {
             MessageBox.Show(
