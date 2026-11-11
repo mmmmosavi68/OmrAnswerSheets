@@ -43,7 +43,7 @@ public partial class MainForm : Form
 
         pnlOriginalHost.Controls.Add(_originalView);
         pnlAlignedHost.Controls.Add(_alignedView);
-
+        _originalView.SetOmrLayout(_controller.Profile.OmrLayout);
         RegisterEvents();
 
         LoadDefaultProfile();
@@ -95,7 +95,7 @@ public partial class MainForm : Form
 
             _controller.SetProfile(profile);
             _originalView.SetMarkers(profile.Markers);
-
+            _originalView.SetOmrLayout(profile.OmrLayout);
             RefreshMarkerGrid();
 
             lblStatus.Text = "پروفایل پیش‌فرض با موفقیت بارگذاری شد.";
@@ -212,6 +212,11 @@ public partial class MainForm : Form
 
             if (gridMarkers.CurrentRow?.Tag is AlignmentMarker marker)
                 _originalView.SelectMarker(marker.Id);
+        };
+
+        _originalView.OmrLayoutChanged += () =>
+        {
+            lblStatus.Text = "تنظیمات هندسی پاسخنامه تغییر کرد.";
         };
     }
 
@@ -383,7 +388,7 @@ public partial class MainForm : Form
 
             _controller.SetProfile(profile);
             _originalView.SetMarkers(profile.Markers);
-
+            _originalView.SetOmrLayout(profile.OmrLayout);
             RefreshMarkerGrid();
 
             lblStatus.Text = "پروفایل با موفقیت بارگذاری شد.";

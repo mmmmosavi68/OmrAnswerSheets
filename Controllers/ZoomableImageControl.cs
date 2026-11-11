@@ -6,7 +6,7 @@ using OmrDesktop.Configuration;
 
 namespace OmrDesktop.Controls;
 
-public sealed class ZoomableImageControl : Control
+public sealed partial class ZoomableImageControl : Control
 {
     private Image? _image;
     private bool _panMoved;
@@ -214,13 +214,14 @@ public sealed class ZoomableImageControl : Control
             imageRect);
 
         foreach (var marker in _markers)
+        {
             DrawMarker(e.Graphics, marker, imageRect);
+        }
+
+        DrawOmrLayout(e.Graphics, imageRect);
     }
 
-    private void DrawMarker(
-        Graphics graphics,
-        AlignmentMarker marker,
-        RectangleF imageRect)
+    private void DrawMarker(Graphics graphics, AlignmentMarker marker, RectangleF imageRect)
     {
         var rect = GetMarkerClientRect(marker, imageRect);
 
@@ -317,9 +318,7 @@ public sealed class ZoomableImageControl : Control
             drawHeight);
     }
 
-    private RectangleF GetMarkerClientRect(
-        AlignmentMarker marker,
-        RectangleF imageRect)
+    private RectangleF GetMarkerClientRect(AlignmentMarker marker, RectangleF imageRect)
     {
         return new RectangleF(
             imageRect.X + (float)(marker.SearchX * imageRect.Width),
@@ -349,8 +348,7 @@ public sealed class ZoomableImageControl : Control
             rect.Y + point.Y * rect.Height / _image.Height);
     }
 
-    private RectangleF GetMarkerImageRect(
-        AlignmentMarker marker)
+    private RectangleF GetMarkerImageRect(AlignmentMarker marker)
     {
         return new RectangleF(
             (float)(marker.SearchX * _image!.Width),
@@ -358,6 +356,7 @@ public sealed class ZoomableImageControl : Control
             (float)(marker.SearchWidth * _image.Width),
             (float)(marker.SearchHeight * _image.Height));
     }
+
 
     protected override void OnMouseDown(MouseEventArgs e)
     {
@@ -379,6 +378,43 @@ public sealed class ZoomableImageControl : Control
         }
 
         var imageRect = GetImageRect();
+
+        // ابتدا عناصر OMR بررسی می‌شوند.
+        if (TrySelectOmrElement(e.Location, imageRect))
+        {
+            _selectedMarkerId = null;
+            SelectionChanged?.Invoke(null);
+
+            var omrRectangle = GetSelectedOmrRectangle();
+
+            if (omrRectangle == null || _selectedOmrType == null)
+                return;
+
+            var clientRect = GetImageRectForOmr(
+                omrRectangle,
+                imageRect);
+
+            _activeHandle = FindHandle(clientRect, e.Location);
+
+            _operation = _activeHandle >= 0
+                ? EditorOperation.Resize
+                : EditorOperation.Move;
+
+            _initialRect = GetOmrImageRectangle(
+                omrRectangle,
+                _selectedOmrType.Value);
+
+            _dragStartImage = ClientToImage(e.Location);
+
+            _isDragging = true;
+            Capture = true;
+
+            Invalidate();
+            return;
+        }
+
+        // اگر عنصر OMR انتخاب نشد، انتخاب قبلی آن لغو می‌شود.
+        ClearOmrSelection();
 
         var selected = FindMarkerAt(e.Location, imageRect);
 
@@ -464,11 +500,17 @@ public sealed class ZoomableImageControl : Control
                 break;
 
             case EditorOperation.Move:
-                MoveSelected(dx, dy);
+                if (_selectedOmrType != null)
+                    MoveSelectedOmr(dx, dy);
+                else
+                    MoveSelected(dx, dy);
                 break;
 
             case EditorOperation.Resize:
-                ResizeSelected(dx, dy);
+                if (_selectedOmrType != null)
+                    ResizeSelectedOmr(dx, dy);
+                else
+                    ResizeSelected(dx, dy);
                 break;
         }
 
@@ -476,9 +518,11 @@ public sealed class ZoomableImageControl : Control
             Invalidate();
     }
 
+
     protected override void OnMouseUp(MouseEventArgs e)
     {
         base.OnMouseUp(e);
+
         if (_isPanning)
         {
             _isPanning = false;
@@ -490,16 +534,22 @@ public sealed class ZoomableImageControl : Control
             Cursor = Cursors.Default;
             return;
         }
+
         if (!_isDragging)
             return;
 
         if (_operation == EditorOperation.Add)
             CompleteAdding(e.Location);
+
         if (_operation == EditorOperation.Move ||
-    _operation == EditorOperation.Resize)
+            _operation == EditorOperation.Resize)
         {
-            MarkersChanged?.Invoke();
+            if (_selectedOmrType != null)
+                OmrLayoutChanged?.Invoke();
+            else
+                MarkersChanged?.Invoke();
         }
+
         _isDragging = false;
         _operation = EditorOperation.None;
         _activeHandle = -1;
@@ -679,12 +729,7 @@ public sealed class ZoomableImageControl : Control
             bottom - top);
     }
 
-    private void SetMarkerRect(
-        AlignmentMarker marker,
-        double x,
-        double y,
-        double width,
-        double height)
+    private void SetMarkerRect(AlignmentMarker marker, double x, double y, double width, double height)
     {
         marker.SearchX = x / _image!.Width;
         marker.SearchY = y / _image.Height;
@@ -694,9 +739,7 @@ public sealed class ZoomableImageControl : Control
         Invalidate();
     }
 
-    private AlignmentMarker? FindMarkerAt(
-        Point point,
-        RectangleF imageRect)
+    private AlignmentMarker? FindMarkerAt(Point point, RectangleF imageRect)
     {
         for (int i = _markers.Count - 1; i >= 0; i--)
         {
@@ -713,9 +756,7 @@ public sealed class ZoomableImageControl : Control
         return null;
     }
 
-    private int FindHandle(
-        RectangleF rect,
-        Point point)
+    private int FindHandle(RectangleF rect, Point point)
     {
         var handles = GetHandles(rect);
 
@@ -737,12 +778,39 @@ public sealed class ZoomableImageControl : Control
         return -1;
     }
 
+
     private void UpdateCursor(Point point)
     {
         if (_isAdding)
         {
             Cursor = Cursors.Cross;
             return;
+        }
+
+        if (_selectedOmrType != null)
+        {
+            var rectangle = GetSelectedOmrRectangle();
+
+            if (rectangle != null)
+            {
+                var rect = GetImageRectForOmr(
+                    rectangle,
+                    GetImageRect());
+
+                var handle = FindHandle(rect, point);
+
+                Cursor = handle switch
+                {
+                    0 or 3 => Cursors.SizeNWSE,
+                    1 or 2 => Cursors.SizeNESW,
+                    4 or 5 => Cursors.SizeNS,
+                    6 or 7 => Cursors.SizeWE,
+                    _ when rect.Contains(point) => Cursors.SizeAll,
+                    _ => Cursors.Default
+                };
+
+                return;
+            }
         }
 
         var marker = FindSelectedMarker();
@@ -753,22 +821,23 @@ public sealed class ZoomableImageControl : Control
             return;
         }
 
-        var rect = GetMarkerClientRect(
+        var markerRect = GetMarkerClientRect(
             marker,
             GetImageRect());
 
-        var handle = FindHandle(rect, point);
+        var markerHandle = FindHandle(markerRect, point);
 
-        Cursor = handle switch
+        Cursor = markerHandle switch
         {
             0 or 3 => Cursors.SizeNWSE,
             1 or 2 => Cursors.SizeNESW,
             4 or 5 => Cursors.SizeNS,
             6 or 7 => Cursors.SizeWE,
-            _ when rect.Contains(point) => Cursors.SizeAll,
+            _ when markerRect.Contains(point) => Cursors.SizeAll,
             _ => Cursors.Default
         };
     }
+
 
     private AlignmentMarker? FindSelectedMarker()
     {
@@ -807,6 +876,7 @@ public sealed class ZoomableImageControl : Control
         Invalidate();
     }
 
+
     protected override void OnKeyDown(KeyEventArgs e)
     {
         base.OnKeyDown(e);
@@ -838,12 +908,36 @@ public sealed class ZoomableImageControl : Control
         if (_image == null)
             return;
 
+        // ابتدا بررسی می‌کنیم آیا یک عنصر OMR انتخاب شده است.
+        if (_selectedOmrType != null)
+        {
+            var step = e.Shift
+                ? _settings.FastMoveStepPixels
+                : 1;
+
+            if (AdjustSelectedOmrByKeyboard(
+                e.KeyCode,
+                step,
+                e.Control))
+            {
+                OmrLayoutChanged?.Invoke();
+
+                e.Handled = true;
+                e.SuppressKeyPress = true;
+
+                Invalidate();
+            }
+
+            return;
+        }
+
+        // در غیر این صورت رفتار قبلی Alignment Marker اجرا می‌شود.
         var marker = FindSelectedMarker();
 
         if (marker == null)
             return;
 
-        var step = e.Shift
+        var markerStep = e.Shift
             ? _settings.FastMoveStepPixels
             : 1;
 
@@ -853,19 +947,19 @@ public sealed class ZoomableImageControl : Control
         switch (e.KeyCode)
         {
             case Keys.Left:
-                dx = e.Control ? -step : -step;
+                dx = -markerStep;
                 break;
 
             case Keys.Right:
-                dx = step;
+                dx = markerStep;
                 break;
 
             case Keys.Up:
-                dy = -step;
+                dy = -markerStep;
                 break;
 
             case Keys.Down:
-                dy = step;
+                dy = markerStep;
                 break;
 
             default:
@@ -880,7 +974,7 @@ public sealed class ZoomableImageControl : Control
 
         if (e.Control)
         {
-            // تغییر عرض و ارتفاع با کلیدهای Ctrl
+            // تغییر اندازه با Ctrl + جهت‌نما
             if (e.KeyCode == Keys.Left ||
                 e.KeyCode == Keys.Right)
                 width += dx;
@@ -901,6 +995,7 @@ public sealed class ZoomableImageControl : Control
         }
         else
         {
+            // جابه‌جایی با جهت‌نما
             x = Math.Clamp(
                 x + dx,
                 0,
@@ -919,8 +1014,12 @@ public sealed class ZoomableImageControl : Control
             width,
             height);
 
+        MarkersChanged?.Invoke();
+
         Invalidate();
+
         e.Handled = true;
+        e.SuppressKeyPress = true;
     }
 
     public void ResetView()
