@@ -1,0 +1,27 @@
+{
+  "Name": "AnswerSheet-1405",
+  "CanvasWidth": 2480,
+  "CanvasHeight": 3508,
+  "Markers": [
+    {
+      "Id": "12808c9c-0b5b-4394-8627-d09e6c55f366",
+      "Name": "TopLeft",
+      "SearchX": 0.17444228197826375,
+      "SearchY": 0.10098847794522468,
+      "SearchWidth": 0.017056040520215556,
+      "SearchHeight": 0.010904624665190635,
+      "TargetXRatio": 0.185,
+      "TargetYRatio": 0.105
+    },
+    {
+      "Id": "f6c86082-84e4-411b-ad2e-7d8fae9a9396",
+      "Name": "BottomRight",
+      "SearchX": 0.9016426624752889,
+      "SearchY": 0.957341888071498,
+      "SearchWidth": 0.014502606542731144,
+      "SearchHeight": 0.010735326652345438,
+      "TargetXRatio": 0.911,
+      "TargetYRatio": 0.96
+    }
+  ]
+}
