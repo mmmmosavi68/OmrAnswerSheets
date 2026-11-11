@@ -74,6 +74,7 @@ public sealed class MainFormController
             $"تعداد {files.Count} تصویر پیدا شد.");
     }
 
+
     public void LoadImage(string imagePath)
     {
         if (!File.Exists(imagePath))
@@ -89,88 +90,137 @@ public sealed class MainFormController
                 SourceImageReady?.Invoke(new Bitmap(loaded));
             }
 
-            using var result = _alignmentService.Align(
-                imagePath,
-                Profile,
-                _settings);
+            using var processing = ProcessSingleImage(imagePath);
 
-            var alignedBitmap =
-                BitmapConverter.ToBitmap(result.AlignedImage);
-
-            var info =
-                $"فایل: {Path.GetFileName(imagePath)}\n" +
-                $"تعداد نشانگرها: {result.DetectedMarkers.Count}\n" +
-                $"ضریب مقیاس: {result.Scale:F5}\n" +
-                $"زاویه چرخش: {result.RotationAngle:F3}\n" +
-                $"خطای RMS: {result.RmsError:F3} پیکسل\n" +
-                $"اصلاح جهت 180 درجه: " +
-                (result.WasRotated180 ? "بله" : "خیر");
-
-            ImagesReady?.Invoke(alignedBitmap, info);
-
-            if (!Profile.OmrLayout.Enabled)
+            if (processing.Alignment == null)
             {
                 StatusChanged?.Invoke(
-                    "تصویر با موفقیت تراز شد؛ تنظیمات OMR فعال نیست.");
+                    "خطا در پردازش تصویر: " + processing.ErrorMessage);
 
                 return;
             }
 
-            try
+            var alignment = processing.Alignment;
+
+            var alignedBitmap =
+                BitmapConverter.ToBitmap(alignment.AlignedImage);
+
+            var info =
+                $"فایل: {Path.GetFileName(imagePath)}\n" +
+                $"تعداد نشانگرها: {alignment.DetectedMarkers.Count}\n" +
+                $"ضریب مقیاس: {alignment.Scale:F5}\n" +
+                $"زاویه چرخش: {alignment.RotationAngle:F3}\n" +
+                $"خطای RMS: {alignment.RmsError:F3} پیکسل\n" +
+                $"اصلاح جهت 180 درجه: " +
+                (alignment.WasRotated180 ? "بله" : "خیر");
+
+            ImagesReady?.Invoke(alignedBitmap, info);
+
+            if (processing.TimingMarks != null)
+                TimingMarksDetected?.Invoke(processing.TimingMarks);
+
+            if (processing.Bubbles != null)
             {
-                // تشخیص تایم‌مارک‌ها
-                var timingResult = _timingMarkService.Detect(
-     result.AlignedImage,
-     Profile.OmrLayout);
-
-                TimingMarksDetected?.Invoke(timingResult);
-
-                if (!timingResult.IsSuccess)
-                {
-                    StatusChanged?.Invoke(
-                        "تصویر تراز شد، اما تشخیص تایم‌مارک‌ها ناموفق بود.");
-
-                    return;
-                }
-
-                // تشخیص حباب‌ها
-                var bubbleResult = _bubbleDetectionService.Detect(
-    result.AlignedImage,
-    Profile.OmrLayout,
-    timingResult);
-
-                // رسم مستطیل‌های حباب‌ها و تایم‌مارک‌ها
-                DrawOmrDebugRectangles(
-                    result.AlignedImage,
-                    Profile.OmrLayout,
-                    bubbleResult);
-
-                // ارسال تصویر علامت‌گذاری‌شده به فرم اصلی
-                var debugBitmap = BitmapConverter.ToBitmap(
-                    result.AlignedImage);
+                var debugBitmap =
+                    BitmapConverter.ToBitmap(alignment.AlignedImage);
 
                 OmrDebugImageReady?.Invoke(debugBitmap);
 
-                // ارسال نتیجه خواندن حباب‌ها
-                BubblesDetected?.Invoke(bubbleResult);
+                BubblesDetected?.Invoke(processing.Bubbles);
+            }
 
-                StatusChanged?.Invoke(
-                    bubbleResult.IsSuccess
-                        ? "تراز تصویر، تایم‌مارک‌ها و حباب‌ها با موفقیت خوانده شدند."
-                        : "خطا در خواندن حباب‌ها.");
-            }
-            catch (Exception ex)
-            {
-                StatusChanged?.Invoke(
-                    "تصویر تراز شد؛ خطا در تشخیص OMR: " + ex.Message);
-            }
+            StatusChanged?.Invoke(
+                processing.IsSuccess
+                    ? "تراز تصویر و خواندن حباب‌ها با موفقیت انجام شد."
+                    : "پردازش تصویر ناموفق بود: " +
+                      processing.ErrorMessage);
         }
         catch (Exception ex)
         {
             StatusChanged?.Invoke(
-                "خطا در پردازش تصویر: " + ex.Message);
+                "خطا در نمایش نتیجه تصویر: " + ex.Message);
         }
     }
+
+    /// <summary>
+    /// پردازش مستقل یک تصویر، بدون وابستگی به رابط کاربری
+    /// </summary>
+    public ImageProcessingResult ProcessSingleImage(string imagePath)
+    {
+        AlignmentResult? alignment = null;
+
+        try
+        {
+            if (!File.Exists(imagePath))
+            {
+                return new ImageProcessingResult
+                {
+                    ErrorMessage = "فایل تصویر پیدا نشد."
+                };
+            }
+
+            // مرحله اول: تراز تصویر
+            alignment = _alignmentService.Align(
+                imagePath,
+                Profile,
+                _settings);
+
+            if (!Profile.OmrLayout.Enabled)
+            {
+                return new ImageProcessingResult
+                {
+                    Alignment = alignment,
+                    ErrorMessage = "تنظیمات OMR فعال نیست."
+                };
+            }
+
+            // مرحله دوم: تشخیص تایم‌مارک‌ها
+            var timingResult = _timingMarkService.Detect(
+                alignment.AlignedImage,
+                Profile.OmrLayout);
+
+            if (!timingResult.IsSuccess)
+            {
+                return new ImageProcessingResult
+                {
+                    Alignment = alignment,
+                    TimingMarks = timingResult,
+                    ErrorMessage = timingResult.Message
+                };
+            }
+
+            // مرحله سوم: تشخیص و خواندن حباب‌ها
+            var bubbleResult = _bubbleDetectionService.Detect(
+                alignment.AlignedImage,
+                Profile.OmrLayout,
+                timingResult);
+
+            // رسم مستطیل‌های تشخیص داده‌شده
+            DrawOmrDebugRectangles(
+                alignment.AlignedImage,
+                Profile.OmrLayout,
+                bubbleResult);
+
+            return new ImageProcessingResult
+            {
+                Alignment = alignment,
+                TimingMarks = timingResult,
+                Bubbles = bubbleResult,
+                ErrorMessage = bubbleResult.IsSuccess
+                    ? string.Empty
+                    : bubbleResult.Message
+            };
+        }
+        catch (Exception ex)
+        {
+            return new ImageProcessingResult
+            {
+                Alignment = alignment,
+                ErrorMessage = ex.Message
+            };
+        }
+    }
+
 
     // رسم مستطیل‌های حباب‌ها و تایم‌مارک‌ها
     private static void DrawOmrDebugRectangles(
