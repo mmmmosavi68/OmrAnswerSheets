@@ -219,6 +219,8 @@ public sealed partial class ZoomableImageControl : Control
         }
 
         DrawOmrLayout(e.Graphics, imageRect);
+
+        DrawOmrBubblePreview(e.Graphics, imageRect);
     }
 
     private void DrawMarker(Graphics graphics, AlignmentMarker marker, RectangleF imageRect)
@@ -357,7 +359,6 @@ public sealed partial class ZoomableImageControl : Control
             (float)(marker.SearchHeight * _image.Height));
     }
 
-
     protected override void OnMouseDown(MouseEventArgs e)
     {
         base.OnMouseDown(e);
@@ -366,7 +367,15 @@ public sealed partial class ZoomableImageControl : Control
 
         if (_image == null || e.Button != MouseButtons.Left)
             return;
-
+        if (_isAddingOmrBubble)
+        {
+            _operation = EditorOperation.Add;
+            _dragStartImage = ClientToImage(e.Location);
+            _isDragging = true;
+            Capture = true;
+            Invalidate();
+            return;
+        }
         if (_isAdding)
         {
             _operation = EditorOperation.Add;
@@ -518,7 +527,6 @@ public sealed partial class ZoomableImageControl : Control
             Invalidate();
     }
 
-
     protected override void OnMouseUp(MouseEventArgs e)
     {
         base.OnMouseUp(e);
@@ -567,7 +575,11 @@ public sealed partial class ZoomableImageControl : Control
     {
         if (_image == null)
             return;
-
+        if (_isAddingOmrBubble)
+        {
+            CompleteOmrBubbleAdding(mousePosition);
+            return;
+        }
         var start = _dragStartImage;
         var end = ClientToImage(mousePosition);
 
@@ -781,6 +793,11 @@ public sealed partial class ZoomableImageControl : Control
 
     private void UpdateCursor(Point point)
     {
+        if (_isAddingOmrBubble)
+        {
+            Cursor = Cursors.Cross;
+            return;
+        }
         if (_isAdding)
         {
             Cursor = Cursors.Cross;
@@ -884,6 +901,7 @@ public sealed partial class ZoomableImageControl : Control
         if (e.KeyCode == Keys.Escape)
         {
             AddMarkerMode = false;
+            CancelAddOmrBubble();
             _isDragging = false;
             Capture = false;
             Invalidate();

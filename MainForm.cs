@@ -5,6 +5,9 @@ using OmrDesktop.Controls;
 using OmrDesktop.Controllers;
 using OmrDesktop.Models;
 using OmrDesktop.Services;
+using System.Text.Json;
+using OmrDesktop.Forms;
+
 
 namespace OmrDesktop;
 
@@ -61,8 +64,10 @@ public partial class MainForm : Form
             (btnAddMarker, "افزودن نشانگر"),
             (btnRemoveMarker, "حذف نشانگر"),
             (btnAlign, "تراز تصویر"),
+            (btnConfigureBubbles, "تنظیم حباب‌ها"),
             (btnSaveProfile, "ذخیره پروفایل"),
             (btnLoadProfile, "بارگذاری پروفایل")
+
         };
 
         foreach (var item in buttons)
@@ -218,6 +223,61 @@ public partial class MainForm : Form
         {
             lblStatus.Text = "تنظیمات هندسی پاسخنامه تغییر کرد.";
         };
+
+
+        btnConfigureBubbles.Click += (_, _) =>
+        {
+            if (string.IsNullOrWhiteSpace(_currentImagePath))
+            {
+                MessageBox.Show(
+                    "ابتدا تصویر مرجع را انتخاب کنید.",
+                    "تصویر انتخاب نشده",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
+
+                return;
+            }
+
+            try
+            {
+                // ساخت یک نسخه مستقل از تنظیمات حباب‌ها
+                var json = JsonSerializer.Serialize(
+                    _controller.Profile.OmrLayout);
+
+                var temporaryLayout =
+                    JsonSerializer.Deserialize<OmrLayoutProfile>(json)
+                    ?? new OmrLayoutProfile();
+
+                using var form = new OmrBubbleSetupForm(
+                    _currentImagePath,
+                    temporaryLayout,
+                    _settings);
+
+                if (form.ShowDialog(this) != DialogResult.OK)
+                    return;
+
+                // انتقال تنظیمات جدید حباب‌ها به پروفایل اصلی
+                _controller.Profile.OmrLayout = form.Layout;
+
+                // به‌روزرسانی نمایش در فرم اصلی
+                _originalView.SetOmrLayout(form.Layout);
+
+                // ذخیره خودکار کل پروفایل با حفظ تنظیمات خط‌کش
+                SaveProfile();
+
+                lblStatus.Text =
+                    "تنظیمات حباب‌ها با موفقیت ذخیره شد.";
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(
+                    ex.Message,
+                    "خطای تنظیم حباب‌ها",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error);
+            }
+        };
+
     }
 
     private void LoadSelectedImage(string path)
