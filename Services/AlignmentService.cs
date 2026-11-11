@@ -12,6 +12,15 @@ namespace OmrDesktop.Services;
 
 public sealed class AlignmentService
 {
+    // هر مرحله محدوده جستجو را نسبت به محدوده اصلی بزرگ‌تر می‌کند.
+    private static readonly double[] SearchExpansionFactors =
+    [
+        1.0,
+        1.5,
+        2.0,
+        2.5
+    ];
+
     public AlignmentResult Align(
         string imagePath,
         AlignmentProfile profile,
@@ -69,12 +78,12 @@ public sealed class AlignmentService
             selected.Detected,
             profile);
 
-
         // کنترل ضریب مقیاس تبدیل
         if (transform.Scale < settings.MinScale ||
             transform.Scale > settings.MaxScale)
         {
-            return null;
+            throw new InvalidOperationException(
+                $"ضریب مقیاس تصویر خارج از محدوده مجاز است. مقدار تشخیص داده شده: {transform.Scale:F3}");
         }
 
         var aligned = new Mat();
@@ -147,8 +156,10 @@ public sealed class AlignmentService
 
         if (Math.Abs(sourceRatio - targetRatio) >
             settings.MaxPageAspectRatioDifference)
+        {
             throw new InvalidOperationException(
                 "نسبت ابعاد تصویر ورودی با پروفایل مطابقت ندارد.");
+        }
     }
 
     private static DetectionAttempt? TryDetect(
@@ -221,122 +232,205 @@ public sealed class AlignmentService
         AlignmentMarker marker,
         AlignmentSettings settings)
     {
-        var x = (int)Math.Round(
+        // محدوده اصلی جستجو
+        var originalX = (int)Math.Round(
             marker.SearchX * binary.Width);
 
-        var y = (int)Math.Round(
+        var originalY = (int)Math.Round(
             marker.SearchY * binary.Height);
 
-        var width = (int)Math.Round(
+        var originalWidth = (int)Math.Round(
             marker.SearchWidth * binary.Width);
 
-        var height = (int)Math.Round(
+        var originalHeight = (int)Math.Round(
             marker.SearchHeight * binary.Height);
 
-        var roiRect = new CvRect(
-            x,
-            y,
-            width,
-            height);
-
-        if (roiRect.Width <= 0 ||
-            roiRect.Height <= 0 ||
-            roiRect.X < 0 ||
-            roiRect.Y < 0 ||
-            roiRect.Right > binary.Width ||
-            roiRect.Bottom > binary.Height)
+        if (originalWidth <= 0 || originalHeight <= 0)
             return null;
 
-        using var roi = new Mat(binary, roiRect);
+        var originalCenterX =
+            originalX + originalWidth / 2.0;
 
-        Cv2.FindContours(
-            roi,
-            out CvPoint[][] contours,
-            out _,
-            RetrievalModes.External,
-            ContourApproximationModes.ApproxSimple);
+        var originalCenterY =
+            originalY + originalHeight / 2.0;
 
+        // محدوده مجاز اندازه و شکل کاندیداها
+        // فیلترها نسبت به تنظیمات قبلی کمی منعطف‌تر شده‌اند.
         var imageArea =
             (double)binary.Width * binary.Height;
 
         var minArea =
-            imageArea * settings.MinMarkerAreaRatio;
+            imageArea * settings.MinMarkerAreaRatio * 0.5;
 
         var maxArea =
-            imageArea * settings.MaxMarkerAreaRatio;
+            imageArea * settings.MaxMarkerAreaRatio * 2.0;
+
+        var minAspectRatio =
+            settings.MinAspectRatio * 0.8;
+
+        var maxAspectRatio =
+            settings.MaxAspectRatio * 1.2;
+
+        var minExtent =
+            Math.Max(0.40, settings.MinExtent - 0.15);
+
+        var minSolidity =
+            Math.Max(0.60, settings.MinSolidity - 0.15);
 
         DetectedMarker? best = null;
+        double bestScore = double.MaxValue;
 
-        foreach (var contour in contours)
+        foreach (var expansion in SearchExpansionFactors)
         {
-            var area = Cv2.ContourArea(contour);
+            // بزرگ کردن محدوده حول مرکز محدوده اصلی
+            var expandedWidth =
+                (int)Math.Ceiling(originalWidth * expansion);
 
-            if (area < minArea || area > maxArea)
+            var expandedHeight =
+                (int)Math.Ceiling(originalHeight * expansion);
+
+            var expandedX =
+                (int)Math.Round(originalCenterX - expandedWidth / 2.0);
+
+            var expandedY =
+                (int)Math.Round(originalCenterY - expandedHeight / 2.0);
+
+            // محدود کردن محدوده به ابعاد تصویر
+            var left = Math.Max(0, expandedX);
+            var top = Math.Max(0, expandedY);
+
+            var right = Math.Min(
+                binary.Width,
+                expandedX + expandedWidth);
+
+            var bottom = Math.Min(
+                binary.Height,
+                expandedY + expandedHeight);
+
+            var roiWidth = right - left;
+            var roiHeight = bottom - top;
+
+            if (roiWidth <= 0 || roiHeight <= 0)
                 continue;
 
-            var bounds = Cv2.BoundingRect(contour);
+            var roiRect = new CvRect(
+                left,
+                top,
+                roiWidth,
+                roiHeight);
 
-            if (bounds.Width <= 0 || bounds.Height <= 0)
-                continue;
+            using var roi = new Mat(binary, roiRect);
 
-            var aspectRatio =
-                (double)bounds.Width / bounds.Height;
+            Cv2.FindContours(
+                roi,
+                out CvPoint[][] contours,
+                out _,
+                RetrievalModes.External,
+                ContourApproximationModes.ApproxSimple);
 
-            if (aspectRatio < settings.MinAspectRatio ||
-                aspectRatio > settings.MaxAspectRatio)
-                continue;
-
-            var extent =
-                area / ((double)bounds.Width * bounds.Height);
-
-            if (extent < settings.MinExtent)
-                continue;
-
-            CvPoint[] hull = Cv2.ConvexHull(contour);
-
-            var hullArea = Cv2.ContourArea(hull);
-
-            if (hullArea <= 0)
-                continue;
-
-            var solidity = area / hullArea;
-
-            if (solidity < settings.MinSolidity)
-                continue;
-
-            var center = new CvPoint2f(
-                roiRect.X + bounds.X + bounds.Width / 2f,
-                roiRect.Y + bounds.Y + bounds.Height / 2f);
-
-            var dx =
-                (center.X - (roiRect.X + roiRect.Width / 2.0)) /
-                (roiRect.Width / 2.0);
-
-            var dy =
-                (center.Y - (roiRect.Y + roiRect.Height / 2.0)) /
-                (roiRect.Height / 2.0);
-
-            var positionScore =
-                Math.Sqrt(dx * dx + dy * dy);
-
-            if (positionScore > settings.MaxPositionScore)
-                continue;
-
-            var candidate = new DetectedMarker
+            foreach (var contour in contours)
             {
-                Marker = marker,
-                Bounds = new CvRect(
-                    roiRect.X + bounds.X,
-                    roiRect.Y + bounds.Y,
-                    bounds.Width,
-                    bounds.Height),
-                Center = center,
-                PositionScore = positionScore
-            };
+                var area = Cv2.ContourArea(contour);
 
-            if (best == null ||
-                candidate.PositionScore < best.PositionScore)
-                best = candidate;
+                if (area < minArea || area > maxArea)
+                    continue;
+
+                var bounds = Cv2.BoundingRect(contour);
+
+                if (bounds.Width <= 0 || bounds.Height <= 0)
+                    continue;
+
+                var aspectRatio =
+                    (double)bounds.Width / bounds.Height;
+
+                if (aspectRatio < minAspectRatio ||
+                    aspectRatio > maxAspectRatio)
+                {
+                    continue;
+                }
+
+                var extent =
+                    area / ((double)bounds.Width * bounds.Height);
+
+                if (extent < minExtent)
+                    continue;
+
+                CvPoint[] hull = Cv2.ConvexHull(contour);
+
+                var hullArea = Cv2.ContourArea(hull);
+
+                if (hullArea <= 0)
+                    continue;
+
+                var solidity = area / hullArea;
+
+                if (solidity < minSolidity)
+                    continue;
+
+                var center = new CvPoint2f(
+                    roiRect.X + bounds.X + bounds.Width / 2f,
+                    roiRect.Y + bounds.Y + bounds.Height / 2f);
+
+                // فاصله کاندیدا از مرکز محدوده اصلی
+                // نه مرکز محدوده بزرگ‌شده
+                var dx =
+                    (center.X - originalCenterX) /
+                    (originalWidth / 2.0);
+
+                var dy =
+                    (center.Y - originalCenterY) /
+                    (originalHeight / 2.0);
+
+                var positionScore =
+                    Math.Sqrt(dx * dx + dy * dy);
+
+                // از انتخاب اشکال خیلی دور از محل اصلی جلوگیری می‌کنیم.
+                var maxPositionScore =
+                    Math.Max(settings.MaxPositionScore, 3.0);
+
+                if (positionScore > maxPositionScore)
+                    continue;
+
+                // امتیاز شکل:
+                // شکل نزدیک‌تر به مربع، پرشدگی بیشتر و یکپارچگی بهتر،
+                // امتیاز بهتری می‌گیرد.
+                var aspectPenalty =
+                    Math.Abs(Math.Log(aspectRatio));
+
+                var extentPenalty =
+                    Math.Max(0, 0.90 - extent);
+
+                var solidityPenalty =
+                    Math.Max(0, 0.95 - solidity);
+
+                // محدوده‌های بزرگ‌تر فقط در صورت نیاز استفاده شوند.
+                var expansionPenalty =
+                    (expansion - 1.0) * 0.20;
+
+                var candidateScore =
+                    positionScore +
+                    aspectPenalty * 0.50 +
+                    extentPenalty * 1.50 +
+                    solidityPenalty * 1.50 +
+                    expansionPenalty;
+
+                if (candidateScore >= bestScore)
+                    continue;
+
+                bestScore = candidateScore;
+
+                best = new DetectedMarker
+                {
+                    Marker = marker,
+                    Bounds = new CvRect(
+                        roiRect.X + bounds.X,
+                        roiRect.Y + bounds.Y,
+                        bounds.Width,
+                        bounds.Height),
+                    Center = center,
+                    PositionScore = candidateScore
+                };
+            }
         }
 
         return best;
