@@ -1,5 +1,5 @@
-﻿
-namespace OmrDesktop.Models;
+﻿namespace OmrDesktop.Models;
+
 
 public sealed class AlignmentProfile
 {
@@ -11,6 +11,9 @@ public sealed class AlignmentProfile
 
     public List<AlignmentMarker> Markers { get; set; } = [];
 
+    // تنظیمات تشخیص و خواندن حباب‌های پاسخنامه
+    public OmrLayoutProfile OmrLayout { get; set; } = new();
+
     public static AlignmentProfile CreateDefault()
     {
         return new AlignmentProfile
@@ -21,33 +24,35 @@ public sealed class AlignmentProfile
             CanvasHeight = 3508,
 
             Markers =
-            [
-                new AlignmentMarker
-                {
-                    Name = "TopLeft",
+        [
+        new AlignmentMarker
+{
+Name = "TopLeft",
 
-                    SearchX = 0.1615,
-                    SearchY = 0.0805,
-                    SearchWidth = 0.05,
-                    SearchHeight = 0.05,
+SearchX = 0.1615,
+SearchY = 0.0805,
+SearchWidth = 0.05,
+SearchHeight = 0.05,
 
-                    TargetXRatio = 0.185,
-                    TargetYRatio = 0.105
-                },
+TargetXRatio = 0.185,
+TargetYRatio = 0.105
+},
 
-                new AlignmentMarker
-                {
-                    Name = "BottomRight",
+new AlignmentMarker
+{
+Name = "BottomRight",
 
-                    SearchX = 0.887,
-                    SearchY = 0.937,
-                    SearchWidth = 0.05,
-                    SearchHeight = 0.05,
+SearchX = 0.887,
+SearchY = 0.937,
+SearchWidth = 0.05,
+SearchHeight = 0.05,
 
-                    TargetXRatio = 0.911,
-                    TargetYRatio = 0.960
-                }
-            ]
+TargetXRatio = 0.911,
+TargetYRatio = 0.960
+}
+        ],
+
+            OmrLayout = new OmrLayoutProfile()
         };
     }
 }
