@@ -7,6 +7,12 @@ namespace OmrDesktop.Controls;
 public sealed partial class ZoomableImageControl
 {
     private bool _isAddingOmrBubble;
+
+    /// <summary>
+    /// در صورت فعال بودن، اندازه حباب‌های انتخاب‌شده قابل تغییر نیست.
+    /// </summary>
+    public bool LockOmrBubbleResize { get; set; }
+
     private int _omrBubbleAddRowIndex = -1;
     private RectangleF _bubblePreviewRect;
 

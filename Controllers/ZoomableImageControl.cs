@@ -405,6 +405,13 @@ public sealed partial class ZoomableImageControl : Control
 
             _activeHandle = FindHandle(clientRect, e.Location);
 
+            // حباب‌های تولیدشده فقط قابل جابه‌جایی هستند.
+            if (_selectedOmrType == OmrElementType.Bubble &&
+                LockOmrBubbleResize)
+            {
+                _activeHandle = -1;
+            }
+
             _operation = _activeHandle >= 0
                 ? EditorOperation.Resize
                 : EditorOperation.Move;

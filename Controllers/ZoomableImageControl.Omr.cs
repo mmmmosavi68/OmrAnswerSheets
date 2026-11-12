@@ -606,6 +606,13 @@ public sealed partial class ZoomableImageControl
 
     private bool AdjustSelectedOmrByKeyboard(Keys key, double step, bool resize)
     {
+        if (resize &&
+    _selectedOmrType == OmrElementType.Bubble &&
+    LockOmrBubbleResize)
+        {
+            return false;
+        }
+
         var rectangle = GetSelectedOmrRectangle();
 
         if (rectangle == null ||

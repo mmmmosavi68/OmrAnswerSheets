@@ -223,10 +223,7 @@ public sealed class MainFormController
 
 
     // رسم مستطیل‌های حباب‌ها و تایم‌مارک‌ها
-    private static void DrawOmrDebugRectangles(
-        Mat image,
-        OmrLayoutProfile layout,
-        OmrBubbleDetectionResult result)
+    private static void DrawOmrDebugRectangles(Mat image, OmrLayoutProfile layout, OmrBubbleDetectionResult result)
     {
         var red = new Scalar(0, 0, 255);
 
@@ -283,14 +280,39 @@ public sealed class MainFormController
                 (i + 31).ToString(),
                 red);
         }
+
+        // حباب‌های مرجع پاسخ‌ها؛ هر ستون شامل ۴ حباب
+        if (layout.AnswerColumns != null)
+        {
+            foreach (var column in layout.AnswerColumns)
+            {
+                if (column.Bubbles == null)
+                    continue;
+
+                foreach (var bubble in column.Bubbles)
+                {
+                    // مختصات حباب نسبت به MainRegion است.
+                    var rect = ToPixelRect(
+                        bubble,
+                        main.Width,
+                        main.Height,
+                        main.X,
+                        main.Y);
+
+                    var label = $"C{column.ColumnNumber}";
+
+                    DrawRectangleWithLabel(
+                        image,
+                        rect,
+                        label,
+                        new Scalar(0, 0, 255));
+                }
+            }
+        }
     }
 
     // رسم مستطیل و شماره آن
-    private static void DrawRectangleWithLabel(
-        Mat image,
-        OpenCvSharp.Rect rect,
-        string label,
-        Scalar color)
+    private static void DrawRectangleWithLabel(Mat image, OpenCvSharp.Rect rect, string label, Scalar color)
     {
         Cv2.Rectangle(
             image,
@@ -311,12 +333,7 @@ public sealed class MainFormController
     }
 
     // تبدیل مختصات نسبی به مختصات پیکسلی
-    private static OpenCvSharp.Rect ToPixelRect(
-        OmrRectangle rectangle,
-        int parentWidth,
-        int parentHeight,
-        int offsetX = 0,
-        int offsetY = 0)
+    private static OpenCvSharp.Rect ToPixelRect(OmrRectangle rectangle, int parentWidth, int parentHeight, int offsetX = 0, int offsetY = 0)
     {
         return new OpenCvSharp.Rect(
             offsetX + (int)Math.Round(

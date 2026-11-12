@@ -14,10 +14,16 @@ partial class OmrBubbleSetupForm
     private System.Windows.Forms.Label lblCount;
     private System.Windows.Forms.Label lblSpacing;
     private System.Windows.Forms.Label lblDirection;
+    private System.Windows.Forms.Label lblBubblesPerColumn;
+    private System.Windows.Forms.Label lblColumnCount;
+    private System.Windows.Forms.Label lblColumnSpacing;
 
     private System.Windows.Forms.ComboBox _rowSelector;
     private System.Windows.Forms.NumericUpDown _bubbleCount;
     private System.Windows.Forms.NumericUpDown _spacing;
+    private System.Windows.Forms.NumericUpDown _bubblesPerColumn;
+    private System.Windows.Forms.NumericUpDown _columnCount;
+    private System.Windows.Forms.NumericUpDown _columnSpacing;
     private System.Windows.Forms.ComboBox _direction;
 
     private System.Windows.Forms.Button _drawFirstButton;
@@ -47,10 +53,16 @@ partial class OmrBubbleSetupForm
         lblCount = new Label();
         lblSpacing = new Label();
         lblDirection = new Label();
+        lblBubblesPerColumn = new Label();
+        lblColumnCount = new Label();
+        lblColumnSpacing = new Label();
 
         _rowSelector = new ComboBox();
         _bubbleCount = new NumericUpDown();
         _spacing = new NumericUpDown();
+        _bubblesPerColumn = new NumericUpDown();
+        _columnCount = new NumericUpDown();
+        _columnSpacing = new NumericUpDown();
         _direction = new ComboBox();
 
         _drawFirstButton = new Button();
@@ -67,6 +79,9 @@ partial class OmrBubbleSetupForm
 
         ((System.ComponentModel.ISupportInitialize)_bubbleCount).BeginInit();
         ((System.ComponentModel.ISupportInitialize)_spacing).BeginInit();
+        ((System.ComponentModel.ISupportInitialize)_bubblesPerColumn).BeginInit();
+        ((System.ComponentModel.ISupportInitialize)_columnCount).BeginInit();
+        ((System.ComponentModel.ISupportInitialize)_columnSpacing).BeginInit();
 
         SuspendLayout();
 
@@ -77,7 +92,7 @@ partial class OmrBubbleSetupForm
 
         rootLayout.RowCount = 3;
         rootLayout.RowStyles.Add(
-            new RowStyle(SizeType.Absolute, 58F));
+            new RowStyle(SizeType.Absolute, 100F));
         rootLayout.RowStyles.Add(
             new RowStyle(SizeType.Percent, 100F));
         rootLayout.RowStyles.Add(
@@ -93,7 +108,7 @@ partial class OmrBubbleSetupForm
         // toolbarPanel
         toolbarPanel.Dock = DockStyle.Fill;
         toolbarPanel.FlowDirection = FlowDirection.RightToLeft;
-        toolbarPanel.WrapContents = false;
+        toolbarPanel.WrapContents = true;
         toolbarPanel.AutoScroll = true;
         toolbarPanel.Padding = new Padding(8);
         toolbarPanel.Name = "toolbarPanel";
@@ -105,34 +120,72 @@ partial class OmrBubbleSetupForm
 
         // _rowSelector
         _rowSelector.DropDownStyle = ComboBoxStyle.DropDownList;
-        _rowSelector.Width = 150;
+        _rowSelector.Width = 140;
         _rowSelector.Name = "_rowSelector";
 
         // lblCount
-        lblCount.Text = "تعداد:";
+        lblCount.Text = "تعداد کل:";
         lblCount.AutoSize = true;
         lblCount.Padding = new Padding(5, 8, 5, 0);
 
         // _bubbleCount
         _bubbleCount.Minimum = 1;
-        _bubbleCount.Maximum = 200;
-        _bubbleCount.Value = 1;
-        _bubbleCount.Width = 75;
+        _bubbleCount.Maximum = 500;
+        _bubbleCount.Value = 24;
+        _bubbleCount.Width = 65;
         _bubbleCount.Name = "_bubbleCount";
 
         // lblSpacing
-        lblSpacing.Text = "فاصله مرکز تا مرکز (پیکسل):";
+        lblSpacing.Text = "فاصله حباب‌ها (پیکسل):";
         lblSpacing.AutoSize = true;
         lblSpacing.Padding = new Padding(5, 8, 5, 0);
 
         // _spacing
-        _spacing.Minimum = 1;
+        _spacing.Minimum = 0;
         _spacing.Maximum = 2000;
         _spacing.DecimalPlaces = 1;
         _spacing.Increment = 0.5M;
-        _spacing.Value = 10;
-        _spacing.Width = 85;
+        _spacing.Value = 5;
+        _spacing.Width = 75;
         _spacing.Name = "_spacing";
+
+        // lblBubblesPerColumn
+        lblBubblesPerColumn.Text = "حباب در هر ستون:";
+        lblBubblesPerColumn.AutoSize = true;
+        lblBubblesPerColumn.Padding = new Padding(5, 8, 5, 0);
+
+        // _bubblesPerColumn
+        _bubblesPerColumn.Minimum = 1;
+        _bubblesPerColumn.Maximum = 100;
+        _bubblesPerColumn.Value = 4;
+        _bubblesPerColumn.Width = 60;
+        _bubblesPerColumn.Name = "_bubblesPerColumn";
+
+        // lblColumnCount
+        lblColumnCount.Text = "تعداد ستون:";
+        lblColumnCount.AutoSize = true;
+        lblColumnCount.Padding = new Padding(5, 8, 5, 0);
+
+        // _columnCount
+        _columnCount.Minimum = 1;
+        _columnCount.Maximum = 50;
+        _columnCount.Value = 6;
+        _columnCount.Width = 60;
+        _columnCount.Name = "_columnCount";
+
+        // lblColumnSpacing
+        lblColumnSpacing.Text = "فاصله ستون‌ها (پیکسل):";
+        lblColumnSpacing.AutoSize = true;
+        lblColumnSpacing.Padding = new Padding(5, 8, 5, 0);
+
+        // _columnSpacing
+        _columnSpacing.Minimum = 0;
+        _columnSpacing.Maximum = 3000;
+        _columnSpacing.DecimalPlaces = 1;
+        _columnSpacing.Increment = 1;
+        _columnSpacing.Value = 15;
+        _columnSpacing.Width = 75;
+        _columnSpacing.Name = "_columnSpacing";
 
         // lblDirection
         lblDirection.Text = "جهت:";
@@ -141,13 +194,13 @@ partial class OmrBubbleSetupForm
 
         // _direction
         _direction.DropDownStyle = ComboBoxStyle.DropDownList;
-        _direction.Width = 80;
+        _direction.Width = 75;
         _direction.Items.AddRange(new object[] { "چپ", "راست" });
         _direction.SelectedIndex = 1;
         _direction.Name = "_direction";
 
         // Buttons
-        ConfigureButton(_drawFirstButton, "رسم حباب اول");
+        ConfigureButton(_drawFirstButton, "رسم حباب مرجع");
         ConfigureButton(_generateButton, "ساخت حباب‌ها");
         ConfigureButton(_removeButton, "حذف حباب انتخاب‌شده");
         ConfigureButton(_acceptButton, "ذخیره");
@@ -168,6 +221,15 @@ partial class OmrBubbleSetupForm
 
         toolbarPanel.Controls.Add(lblSpacing);
         toolbarPanel.Controls.Add(_spacing);
+
+        toolbarPanel.Controls.Add(lblBubblesPerColumn);
+        toolbarPanel.Controls.Add(_bubblesPerColumn);
+
+        toolbarPanel.Controls.Add(lblColumnCount);
+        toolbarPanel.Controls.Add(_columnCount);
+
+        toolbarPanel.Controls.Add(lblColumnSpacing);
+        toolbarPanel.Controls.Add(_columnSpacing);
 
         toolbarPanel.Controls.Add(lblDirection);
         toolbarPanel.Controls.Add(_direction);
@@ -202,8 +264,8 @@ partial class OmrBubbleSetupForm
         AutoScaleDimensions = new SizeF(8F, 20F);
         AutoScaleMode = AutoScaleMode.Font;
 
-        ClientSize = new Size(1400, 900);
-        MinimumSize = new Size(1000, 700);
+        ClientSize = new Size(1500, 950);
+        MinimumSize = new Size(1100, 750);
 
         Name = "OmrBubbleSetupForm";
         StartPosition = FormStartPosition.CenterParent;
@@ -225,6 +287,9 @@ partial class OmrBubbleSetupForm
 
         ((System.ComponentModel.ISupportInitialize)_bubbleCount).EndInit();
         ((System.ComponentModel.ISupportInitialize)_spacing).EndInit();
+        ((System.ComponentModel.ISupportInitialize)_bubblesPerColumn).EndInit();
+        ((System.ComponentModel.ISupportInitialize)_columnCount).EndInit();
+        ((System.ComponentModel.ISupportInitialize)_columnSpacing).EndInit();
 
         ResumeLayout(false);
     }
