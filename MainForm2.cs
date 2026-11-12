@@ -11,7 +11,6 @@ using OmrDesktop.Models;
 using OmrDesktop.Services;
 
 namespace OmrDesktop;
-//test
 public partial class MainForm2 : Form
 {
     private readonly AlignmentSettings _settings;
