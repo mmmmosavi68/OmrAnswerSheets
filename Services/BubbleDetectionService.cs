@@ -12,10 +12,7 @@ public sealed class BubbleDetectionService
     private const double FilledThreshold = 0.35;
     private const double InnerMarginRatio = 0.15;
 
-    public OmrBubbleDetectionResult Detect(
-        Mat alignedImage,
-        OmrLayoutProfile layout,
-        TimingMarkDetectionResult timingResult)
+    public OmrBubbleDetectionResult Detect(Mat alignedImage, OmrLayoutProfile layout, TimingMarkDetectionResult timingResult)
     {
         if (alignedImage == null || alignedImage.Empty())
             throw new ArgumentException("تصویر ورودی معتبر نیست.");
@@ -135,9 +132,17 @@ public sealed class BubbleDetectionService
             "کد رمز",
             secondRects);
 
+        // خواندن ۳۰۰ سؤال از شش ستون
+        var answerResults = DetectAnswers(
+            alignedImage,
+            layout,
+            timingResult,
+            main);
+
         bool success =
             firstResult.IsSuccess &&
-            secondResult.IsSuccess;
+            secondResult.IsSuccess &&
+            answerResults.Count == 300;
 
         int expectedPassword = firstResult.Value + 500;
 
@@ -158,22 +163,165 @@ public sealed class BubbleDetectionService
 
             FirstRowRectangles = firstRects,
             SecondRowRectangles = secondRects,
+            AnswerQuestions = answerResults,
 
             Message =
                 $"موقعیت ردیف‌ها با تایم‌مارکرها تعیین شد.\n" +
                 $"خط افقی ردیف اول: Y={firstRowCenterY:F1}\n" +
                 $"خط افقی ردیف دوم: Y={secondRowCenterY:F1}\n" +
+                $"\nتعداد سؤال‌های خوانده‌شده: {answerResults.Count} از ۳۰۰" +
                 validationMessage
         };
+    }
+
+    private static List<AnswerQuestionDetectionResult> DetectAnswers(
+        Mat image,
+        OmrLayoutProfile layout,
+        TimingMarkDetectionResult timingResult,
+        CvRect main)
+    {
+        const int expectedColumnCount = 6;
+        const int questionsPerColumn = 50;
+        const int optionsPerQuestion = 4;
+
+        if (timingResult.LeftMarks.Count < 52)
+        {
+            throw new InvalidOperationException(
+                "برای خواندن سؤالات، حداقل ۵۲ تایم‌مارک سمت چپ لازم است.");
+        }
+
+        if (layout.AnswerColumns == null ||
+            layout.AnswerColumns.Count != expectedColumnCount)
+        {
+            throw new InvalidOperationException(
+                "باید دقیقاً شش ستون پاسخ در پروفایل تعریف شده باشد.");
+        }
+
+        var columns = layout.AnswerColumns
+            .OrderBy(x => x.ColumnNumber)
+            .ToList();
+
+        var results = new List<AnswerQuestionDetectionResult>(
+            expectedColumnCount * questionsPerColumn);
+
+        foreach (var column in columns)
+        {
+            if (column.Bubbles == null ||
+                column.Bubbles.Count != optionsPerQuestion)
+            {
+                throw new InvalidOperationException(
+                    $"ستون {column.ColumnNumber} باید دقیقاً چهار حباب مرجع داشته باشد.");
+            }
+
+            if (column.ColumnNumber < 1 ||
+                column.ColumnNumber > expectedColumnCount)
+            {
+                throw new InvalidOperationException(
+                    $"شماره ستون {column.ColumnNumber} معتبر نیست.");
+            }
+
+            // تبدیل چهار حباب مرجع به مختصات پیکسلی
+            var templates = column.Bubbles
+                .Select(bubble =>
+                    ToPixelRect(
+                        bubble,
+                        main.Width,
+                        main.Height,
+                        main.X,
+                        main.Y))
+                .ToList();
+
+            foreach (var template in templates)
+                ValidateBubbleRect(template, main);
+
+            // ۵۰ ردیف هر ستون
+            for (int rowIndex = 0;
+                 rowIndex < questionsPerColumn;
+                 rowIndex++)
+            {
+                // دو تایم‌مارک اول برای شماره داوطلبی و رمز هستند.
+                // تایم‌مارک سوم به بعد مربوط به سؤال‌هاست.
+                var timingMark = timingResult.LeftMarks[rowIndex + 2];
+
+                double centerY =
+                    timingMark.Y + timingMark.Height / 2.0;
+
+                var optionResults = new List<BubbleDetectionResult>();
+
+                // چهار گزینه از چپ به راست
+                for (int optionIndex = 0;
+                     optionIndex < optionsPerQuestion;
+                     optionIndex++)
+                {
+                    var template = templates[optionIndex];
+
+                    int y = (int)Math.Round(
+                        centerY - template.Height / 2.0,
+                        MidpointRounding.AwayFromZero);
+
+                    var rect = new CvRect(
+                        template.X,
+                        y,
+                        template.Width,
+                        template.Height);
+
+                    ValidateBubbleRect(rect, main);
+
+                    double blackRatio =
+                        CalculateBlackRatio(image, rect);
+
+                    bool isFilled =
+                        blackRatio >= FilledThreshold;
+
+                    optionResults.Add(new BubbleDetectionResult
+                    {
+                        Index = optionIndex + 1,
+                        BubbleId = column.Bubbles[optionIndex].Id,
+                        Name = $"گزینه {optionIndex + 1}",
+                        BlackRatio = blackRatio,
+                        IsFilled = isFilled,
+                        Message = isFilled ? "پر" : "خالی"
+                    });
+                }
+
+                // تعیین پاسخ بر اساس تعداد گزینه‌های انتخاب‌شده
+                var selectedOptions = optionResults
+                    .Where(x => x.IsFilled)
+                    .ToList();
+
+                string answer = selectedOptions.Count switch
+                {
+                    0 => "0",
+                    1 => selectedOptions[0].Index.ToString(),
+                    _ => "؟"
+                };
+
+                int questionNumber =
+                    ((column.ColumnNumber - 1) * questionsPerColumn)
+                    + rowIndex + 1;
+
+                results.Add(new AnswerQuestionDetectionResult
+                {
+                    QuestionNumber = questionNumber,
+                    ColumnNumber = column.ColumnNumber,
+                    RowNumber = rowIndex + 1,
+                    Options = optionResults,
+                    Value = answer,
+                    IsSuccess = true
+                });
+            }
+        }
+
+        return results
+            .OrderBy(x => x.QuestionNumber)
+            .ToList();
     }
 
     /// <summary>
     /// محاسبه ارتفاع مشترک یک خط افقی از روی مرکز عمودی
     /// دو تایم‌مارکر متناظر.
     /// </summary>
-    private static double GetHorizontalReferenceY(
-        CvRect leftMark,
-        CvRect rightMark)
+    private static double GetHorizontalReferenceY(CvRect leftMark, CvRect rightMark)
     {
         double leftCenterY =
             leftMark.Y + leftMark.Height / 2.0;
@@ -191,9 +339,7 @@ public sealed class BubbleDetectionService
     /// مرکز عمودی هر حباب دقیقاً روی خط افقی مرجع قرار بگیرد.
     /// مختصات افقی و ابعاد حباب‌ها بدون تغییر می‌مانند.
     /// </summary>
-    private static List<CvRect> AlignBubbleRowToHorizontalLine(
-        List<CvRect> templateRects,
-        double centerY)
+    private static List<CvRect> AlignBubbleRowToHorizontalLine(List<CvRect> templateRects, double centerY)
     {
         return templateRects
             .Select(rect =>
@@ -214,11 +360,7 @@ public sealed class BubbleDetectionService
     /// <summary>
     /// خواندن وضعیت حباب‌های یک ردیف.
     /// </summary>
-    private static BubbleRowDetectionResult DetectRow(
-        Mat image,
-        Guid rowId,
-        string rowName,
-        List<CvRect> rectangles)
+    private static BubbleRowDetectionResult DetectRow(Mat image, Guid rowId, string rowName, List<CvRect> rectangles)
     {
         var results = new List<BubbleDetectionResult>();
 
@@ -266,9 +408,7 @@ public sealed class BubbleDetectionService
     /// <summary>
     /// محاسبه درصد سیاهی داخل حباب.
     /// </summary>
-    private static double CalculateBlackRatio(
-        Mat image,
-        CvRect bubbleRect)
+    private static double CalculateBlackRatio(Mat image, CvRect bubbleRect)
     {
         int marginX = (int)Math.Round(
             bubbleRect.Width * InnerMarginRatio);
@@ -311,9 +451,7 @@ public sealed class BubbleDetectionService
         return blackPixels / totalPixels;
     }
 
-    private static void ConvertToGray(
-        Mat source,
-        Mat destination)
+    private static void ConvertToGray(Mat source, Mat destination)
     {
         if (source.Channels() == 1)
         {
@@ -340,12 +478,7 @@ public sealed class BubbleDetectionService
         }
     }
 
-    private static CvRect ToPixelRect(
-        OmrRectangle rectangle,
-        int parentWidth,
-        int parentHeight,
-        int offsetX = 0,
-        int offsetY = 0)
+    private static CvRect ToPixelRect(OmrRectangle rectangle, int parentWidth, int parentHeight, int offsetX = 0, int offsetY = 0)
     {
         return new CvRect(
             offsetX + (int)Math.Round(
@@ -361,9 +494,7 @@ public sealed class BubbleDetectionService
                 rectangle.Height * parentHeight));
     }
 
-    private static void ValidateBubbleRect(
-        CvRect rect,
-        CvRect main)
+    private static void ValidateBubbleRect(CvRect rect, CvRect main)
     {
         if (rect.Width <= 0 ||
             rect.Height <= 0 ||
@@ -377,9 +508,7 @@ public sealed class BubbleDetectionService
         }
     }
 
-    private static void ValidateRect(
-        CvRect rect,
-        CvSize imageSize)
+    private static void ValidateRect(CvRect rect, CvSize imageSize)
     {
         if (rect.Width <= 0 ||
             rect.Height <= 0 ||

@@ -47,7 +47,34 @@ public sealed class OmrBubbleDetectionResult
     public List<BubbleRowDetectionResult> Rows { get; init; } = [];
 
     public string Message { get; init; } = string.Empty;
+
     public List<OpenCvSharp.Rect> FirstRowRectangles { get; init; } = [];
 
     public List<OpenCvSharp.Rect> SecondRowRectangles { get; init; } = [];
+
+    /// <summary>
+    /// نتیجه خواندن ۳۰۰ سؤال به ترتیب شماره سؤال
+    /// </summary>
+    public List<AnswerQuestionDetectionResult> AnswerQuestions { get; init; } = [];
+}
+
+/// <summary>
+/// نتیجه خواندن یک سؤال چهارگزینه‌ای
+/// </summary>
+public sealed class AnswerQuestionDetectionResult
+{
+    public int QuestionNumber { get; init; }
+
+    public int ColumnNumber { get; init; }
+
+    public int RowNumber { get; init; }
+
+    public List<BubbleDetectionResult> Options { get; init; } = [];
+
+    /// <summary>
+    /// پاسخ: ۰ = بدون انتخاب، ۱ تا ۴ = گزینه انتخاب‌شده، ؟ = چند انتخاب
+    /// </summary>
+    public string Value { get; init; } = "0";
+
+    public bool IsSuccess { get; init; }
 }

@@ -580,6 +580,12 @@ public partial class MainForm : Form
                             $"رمز مورد انتظار: {(long)candidateNumber.Value + 500}";
                     }
 
+                    var answers = processing.Bubbles?.AnswerQuestions
+      .ToDictionary(
+          x => x.QuestionNumber,
+          x => x.Value)
+      ?? [];
+
                     _lastBatchResults.Add(
                         new BatchProcessingRecord
                         {
@@ -588,7 +594,8 @@ public partial class MainForm : Form
                             Password = password,
                             IsPasswordValid = passwordValid,
                             Status = passwordValid ? "موفق" : "ناموفق",
-                            ErrorMessage = errorMessage
+                            ErrorMessage = errorMessage,
+                            Answers = answers
                         });
 
                     if (passwordValid)
@@ -780,6 +787,7 @@ public partial class MainForm : Form
         return CreateExcelReport(folderPath);
     }
 
+
     private string CreateExcelReport(string folderPath)
     {
         string reportPath = GetUniqueReportPath(folderPath);
@@ -788,20 +796,28 @@ public partial class MainForm : Form
 
         var worksheet = workbook.Worksheets.Add("گزارش پردازش");
 
-        string[] headers =
-        [
-            "نام فایل اصلی",
-            "شماره داوطلبی",
-            "رمز خوانده‌شده",
-            "رمز مورد انتظار",
-            "وضعیت خواندن",
-            "وضعیت کپی",
-            "مسیر فایل اصلی",
-            "مسیر فایل کپی",
-            "شرح خطا"
-        ];
+        var headers = new List<string>
+    {
+        "نام فایل اصلی",
+        "شماره داوطلبی",
+        "رمز خوانده‌شده",
+        "رمز مورد انتظار",
+        "وضعیت خواندن",
+        "وضعیت کپی",
+        "مسیر فایل اصلی",
+        "مسیر فایل کپی",
+        "شرح خطا",
+        "پاسخنامه کامل"
+    };
 
-        for (int i = 0; i < headers.Length; i++)
+        // افزودن ستون‌های ۳۰۰ سؤال
+        for (int questionNumber = 1; questionNumber <= 300; questionNumber++)
+        {
+            headers.Add($"سؤال {questionNumber}");
+        }
+
+        // عنوان ستون‌ها
+        for (int i = 0; i < headers.Count; i++)
         {
             worksheet.Cell(1, i + 1).Value = headers[i];
         }
@@ -810,6 +826,7 @@ public partial class MainForm : Form
 
         foreach (var record in _lastBatchResults)
         {
+            // اطلاعات اصلی
             worksheet.Cell(row, 1).Value =
                 Path.GetFileName(record.OriginalPath);
 
@@ -828,17 +845,43 @@ public partial class MainForm : Form
             worksheet.Cell(row, 8).Value = record.DestinationPath;
             worksheet.Cell(row, 9).Value = record.ErrorMessage;
 
+            // ساخت رشته پیوسته پاسخ‌های ۳۰۰ سؤال
+            var answerString = new System.Text.StringBuilder(300);
+
+            for (int questionNumber = 1; questionNumber <= 300; questionNumber++)
+            {
+                string answer = "0";
+
+                if (record.Answers.TryGetValue(questionNumber, out var detectedAnswer))
+                {
+                    answer = detectedAnswer;
+                }
+
+                // ثبت پاسخ هر سؤال در ستون مستقل
+                worksheet.Cell(row, 10 + questionNumber).Value = answer;
+
+                // افزودن پاسخ به رشته پیوسته
+                answerString.Append(answer);
+            }
+
+            // ثبت پاسخنامه کامل در ستون ۱۰
+            worksheet.Cell(row, 10).Value = answerString.ToString();
+
             row++;
         }
 
+        // قالب‌بندی عنوان‌ها
         var headerRange = worksheet.Range(
             1, 1,
-            1, headers.Length);
+            1, headers.Count);
 
         headerRange.Style.Font.Bold = true;
 
         headerRange.Style.Alignment.Horizontal =
             XLAlignmentHorizontalValues.Center;
+
+        headerRange.Style.Alignment.Vertical =
+            XLAlignmentVerticalValues.Center;
 
         headerRange.Style.Fill.BackgroundColor =
             XLColor.LightBlue;
@@ -847,7 +890,8 @@ public partial class MainForm : Form
 
         worksheet.RangeUsed()?.SetAutoFilter();
 
-        worksheet.Columns().AdjustToContents();
+        // تنظیم عرض ستون‌های اطلاعات اصلی
+        worksheet.Columns(1, 9).AdjustToContents();
 
         worksheet.Column(7).Width = 45;
         worksheet.Column(8).Width = 45;
@@ -855,10 +899,37 @@ public partial class MainForm : Form
 
         worksheet.Column(9).Style.Alignment.WrapText = true;
 
+        // ستون پاسخنامه کامل
+        worksheet.Column(10).Width = 60;
+
+        // ستون‌های سؤال ۱ تا ۳۰۰ (ستون ۱۱ تا ۳۱۰)
+        worksheet.Columns(11, 310).Width = 10;
+
+        if (row > 2)
+        {
+            // قالب‌بندی پاسخنامه کامل
+            var fullAnswerRange = worksheet.Range(2, 10, row - 1, 10);
+
+            fullAnswerRange.Style.Alignment.Horizontal =
+                XLAlignmentHorizontalValues.Left;
+
+            // قالب‌بندی پاسخ‌های تک‌تک سؤالات
+            var answerRange = worksheet.Range(2, 11, row - 1, 310);
+
+            answerRange.Style.Alignment.Horizontal =
+                XLAlignmentHorizontalValues.Center;
+
+            answerRange.Style.Alignment.Vertical =
+                XLAlignmentVerticalValues.Center;
+        }
+
+        // ذخیره فایل اکسل
         workbook.SaveAs(reportPath);
 
         return reportPath;
     }
+
+
 
     private static string GetUniqueReportPath(string folderPath)
     {
@@ -882,9 +953,7 @@ public partial class MainForm : Form
         return reportPath;
     }
 
-    private static void AppendError(
-        BatchProcessingRecord record,
-        string message)
+    private static void AppendError(BatchProcessingRecord record, string message)
     {
         if (string.IsNullOrWhiteSpace(record.ErrorMessage))
         {
@@ -922,6 +991,8 @@ public partial class MainForm : Form
         public string DestinationPath { get; set; } = string.Empty;
 
         public string ErrorMessage { get; set; } = string.Empty;
+
+        public Dictionary<int, string> Answers { get; set; } = [];
     }
 
     #endregion
