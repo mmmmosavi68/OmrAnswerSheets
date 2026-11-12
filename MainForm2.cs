@@ -32,8 +32,6 @@ public partial class MainForm2 : Form
     public MainForm2()
     {
         InitializeComponent();
-        Resize += MainForm2_Resize;
-        LayoutResponsiveControls();
 
         lstFiles.Anchor = AnchorStyles.Top | AnchorStyles.Left;
 
@@ -76,32 +74,60 @@ public partial class MainForm2 : Form
 
     #region Initialization
 
+
     private void ConfigureToolbarButtons()
     {
-        var buttons = new (Button Button, string Text)[]
+        btnSelectFile.AutoSize = true;
+        btnSelectFile.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+        btnSelectFile.Dock = DockStyle.None;
+        btnSelectFile.Anchor = AnchorStyles.None;
+        btnSelectFile.Margin = new Padding(3, 5, 3, 5);
+        var buttons = new Button[]
         {
-                (btnSelectFile, "انتخاب فایل"),
-                (btnSelectFolder, "انتخاب پوشه"),
-                (btnAddMarker, "افزودن نشانگر"),
-                (btnRemoveMarker, "حذف نشانگر"),
-                (btnAlign, "تراز تصویر"),
-                (btnConfigureBubbles, "تنظیم حباب‌ها"),
-                (btnSaveProfile, "ذخیره پروفایل"),
-                (btnLoadProfile, "بارگذاری پروفایل")
+        btnRunBatch,
+        btnSelectFile,
+        btnAlign,
+        btnAddMarker,
+        btnRemoveMarker,
+        btnConfigureBubbles,
+        btnSaveProfile,
+        btnLoadProfile,
+        btnSelectFolder
         };
 
-        foreach (var item in buttons)
+        foreach (var button in buttons)
         {
-            item.Button.Text = item.Text;
-            item.Button.AutoSize = true;
-            item.Button.MinimumSize = new Size(100, 36);
-            item.Button.Padding = new Padding(8, 4, 8, 4);
-            item.Button.Margin = new Padding(4);
-            item.Button.Font = new Font("Tahoma", 9F);
-            item.Button.TextAlign = ContentAlignment.MiddleCenter;
-            item.Button.UseVisualStyleBackColor = true;
+            button.AutoSize = true;
+            button.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+
+            button.Dock = DockStyle.None;
+            button.Anchor = AnchorStyles.None;
+
+            button.MinimumSize = new Size(0, 36);
+            button.Padding = new Padding(8, 4, 8, 4);
+            button.Margin = new Padding(3, 5, 3, 5);
+
+            button.TextAlign = ContentAlignment.MiddleCenter;
         }
+
+        // فعال کردن اسکرول افقی در صورت کمبود فضا
+        toolbarLayout.AutoScroll = true;
+
+        // ستون اول مخصوص نمایش وضعیت پردازش گروهی
+        toolbarLayout.ColumnStyles.Clear();
+
+        toolbarLayout.ColumnStyles.Add(
+            new ColumnStyle(SizeType.Absolute, 201F));
+
+        // عرض سایر ستون‌ها متناسب با دکمه داخل آن‌ها
+        for (int i = 0; i < 9; i++)
+        {
+            toolbarLayout.ColumnStyles.Add(
+                new ColumnStyle(SizeType.AutoSize));
+        }
+
     }
+
 
 
     private void ConfigureBatchControls()
@@ -110,13 +136,9 @@ public partial class MainForm2 : Form
         txtBatchFolderPath.RightToLeft = RightToLeft.No;
         txtBatchFolderPath.TextAlign = HorizontalAlignment.Left;
         txtBatchFolderPath.Text = "ابتدا پوشه تصاویر را انتخاب کنید";
-
-        btnRunBatch.Text = "خواندن تصاویر";
         btnRunBatch.Enabled = false;
-
         progressBatch.Minimum = 0;
         progressBatch.Value = 0;
-
         lblBatchProgress.Text = "آماده";
         lblBatchProgress.RightToLeft = RightToLeft.Yes;
     }
@@ -1190,63 +1212,4 @@ public partial class MainForm2 : Form
     }
 
 
-    private void MainForm2_Resize(object? sender, EventArgs e)
-    {
-        LayoutResponsiveControls();
-    }
-
-    private void LayoutResponsiveControls()
-    {
-        // جلوگیری از محاسبه در زمان ساخته نشدن کنترل‌ها
-        if (pnlOriginalHost == null || pnlAlignedHost == null)
-            return;
-
-        const int leftPanelWidth = 326;
-        const int imageStartX = 344;
-        const int imageGap = 6;
-        const int rightMargin = 9;
-        const int imageTop = 129;
-        const int bottomMargin = 9;
-
-        // عرض فضای در دسترس برای دو تصویر
-        int availableWidth =
-            ClientSize.Width - imageStartX - rightMargin - imageGap;
-
-        int imageWidth = Math.Max(100, availableWidth / 2);
-
-        // ارتفاع قابل استفاده
-        int imageHeight = Math.Max(
-            100,
-            ClientSize.Height - imageTop - bottomMargin
-        );
-
-        // تصویر اصلی
-        pnlOriginalHost.Location = new Point(imageStartX, imageTop);
-        pnlOriginalHost.Size = new Size(imageWidth, imageHeight);
-
-        // تصویر تراز شده
-        pnlAlignedHost.Location = new Point(
-            imageStartX + imageWidth + imageGap,
-            imageTop
-        );
-
-        pnlAlignedHost.Size = new Size(imageWidth, imageHeight);
-
-        // عنوان تصاویر
-        lblOriginalTitle.Location = new Point(
-            pnlOriginalHost.Right - lblOriginalTitle.Width,
-            imageTop - lblOriginalTitle.Height - 3
-        );
-
-        lblAlignedTitle.Location = new Point(
-            pnlAlignedHost.Right - lblAlignedTitle.Width,
-            imageTop - lblAlignedTitle.Height - 3
-        );
-
-        // مسیر پوشه انتخابی، متناسب با عرض فرم
-        txtBatchFolderPath.Width = Math.Max(
-            100,
-            ClientSize.Width - txtBatchFolderPath.Left - rightMargin
-        );
-    }
 }
