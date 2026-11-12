@@ -359,6 +359,7 @@ public sealed partial class ZoomableImageControl : Control
             (float)(marker.SearchHeight * _image.Height));
     }
 
+
     protected override void OnMouseDown(MouseEventArgs e)
     {
         base.OnMouseDown(e);
@@ -367,6 +368,8 @@ public sealed partial class ZoomableImageControl : Control
 
         if (_image == null || e.Button != MouseButtons.Left)
             return;
+
+        // حالت افزودن حباب؛ مستقل از Ctrl
         if (_isAddingOmrBubble)
         {
             _operation = EditorOperation.Add;
@@ -376,6 +379,8 @@ public sealed partial class ZoomableImageControl : Control
             Invalidate();
             return;
         }
+
+        // حالت افزودن مارکر؛ مستقل از Ctrl
         if (_isAdding)
         {
             _operation = EditorOperation.Add;
@@ -387,6 +392,26 @@ public sealed partial class ZoomableImageControl : Control
         }
 
         var imageRect = GetImageRect();
+
+        // بدون Ctrl فقط تصویر جابه‌جا می‌شود.
+        if ((ModifierKeys & Keys.Control) == 0)
+        {
+            if (!imageRect.Contains(e.Location))
+                return;
+
+            _isPanning = true;
+
+            _panStartMouse = e.Location;
+            _panStartOffsetX = _offsetX;
+            _panStartOffsetY = _offsetY;
+
+            Cursor = Cursors.Hand;
+            Capture = true;
+
+            return;
+        }
+
+        // از اینجا به بعد فقط با Ctrl امکان ویرایش عناصر وجود دارد.
 
         // ابتدا عناصر OMR بررسی می‌شوند.
         if (TrySelectOmrElement(e.Location, imageRect))
@@ -429,18 +454,16 @@ public sealed partial class ZoomableImageControl : Control
             return;
         }
 
-        // اگر عنصر OMR انتخاب نشد، انتخاب قبلی آن لغو می‌شود.
         ClearOmrSelection();
 
         var selected = FindMarkerAt(e.Location, imageRect);
 
-        // اگر روی نشانگر کلیک نشده، امکان حرکت تصویر فعال می‌شود.
+        // اگر روی مارکر کلیک نشده باشد، تصویر حرکت می‌کند.
         if (selected == null)
         {
             if (imageRect.Contains(e.Location))
             {
                 _isPanning = true;
-                _panMoved = false;
 
                 _panStartMouse = e.Location;
                 _panStartOffsetX = _offsetX;
@@ -534,6 +557,7 @@ public sealed partial class ZoomableImageControl : Control
             Invalidate();
     }
 
+
     protected override void OnMouseUp(MouseEventArgs e)
     {
         base.OnMouseUp(e);
@@ -542,9 +566,6 @@ public sealed partial class ZoomableImageControl : Control
         {
             _isPanning = false;
             Capture = false;
-
-            if (!_panMoved)
-                SelectMarker(null);
 
             Cursor = Cursors.Default;
             return;
@@ -573,6 +594,7 @@ public sealed partial class ZoomableImageControl : Control
 
         Invalidate();
     }
+
     protected override void OnMouseEnter(EventArgs e)
     {
         base.OnMouseEnter(e);
@@ -797,7 +819,6 @@ public sealed partial class ZoomableImageControl : Control
         return -1;
     }
 
-
     private void UpdateCursor(Point point)
     {
         if (_isAddingOmrBubble)
@@ -805,9 +826,20 @@ public sealed partial class ZoomableImageControl : Control
             Cursor = Cursors.Cross;
             return;
         }
+
         if (_isAdding)
         {
             Cursor = Cursors.Cross;
+            return;
+        }
+
+        // بدون Ctrl، نشانگر همیشه حالت جابه‌جایی تصویر دارد.
+        if ((ModifierKeys & Keys.Control) == 0)
+        {
+            Cursor = GetImageRect().Contains(point)
+                ? Cursors.Hand
+                : Cursors.Default;
+
             return;
         }
 
